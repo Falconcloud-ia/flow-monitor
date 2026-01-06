@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  # 🧠 Broker de Mensajes
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # 📥 Capa de Ingesta (API)
+  ingestion-api:
+    build:
+      context: ../ # Contexto subir un nivel a la raíz del proyecto
+      dockerfile: devops/Dockerfile.backend # Ruta desde el contexto
+    command: uvicorn action_layer.api:app --host 0.0.0.0 --port 8000 --workers 4 --loop uvloop
+    ports:
+      - "8001:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - MODE=INGESTION
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # 👷 Worker de Inteligencia
+  intelligence-worker:
+    build:
+      context: ../
+      dockerfile: devops/Dockerfile.backend
+    command: python -m intelligence_core.worker
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - MODE=WORKER
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      replicas: 2
+
+  # 📊 Dashboard (Frontend)
+  dashboard:
+    build:
+      context: ../dashboard # Contexto específico del dashboard
+      dockerfile: Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      - ingestion-api
+
+networks:
+  default:
+    driver: bridge

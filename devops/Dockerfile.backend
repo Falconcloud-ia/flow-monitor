@@ -1,0 +1,31 @@
+# 🐍 Dockerfile.backend
+# Imagen base ligera y segura
+FROM python:3.11-slim
+
+# Variables de entorno para optimización de Python
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=off \
+    PIP_DISABLE_PIP_VERSION_CHECK=on
+
+# Directorio de trabajo
+WORKDIR /app
+
+# Instalar dependencias del sistema necesarias
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copiar requirements primero para aprovechar caché de docker
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copiar el código fuente
+COPY . .
+
+# Usuario no root por seguridad
+RUN useradd -m appuser && chown -R appuser /app
+USER appuser
+
+# El comando por defecto (se sobreescribe en k8s/docker-compose)
+CMD ["python", "-m", "action_layer.api"]

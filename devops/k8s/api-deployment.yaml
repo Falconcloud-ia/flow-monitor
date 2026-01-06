@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flow-monitor-api
+  labels:
+    app: flow-monitor-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: flow-monitor-api
+  template:
+    metadata:
+      labels:
+        app: flow-monitor-api
+    spec:
+      containers:
+      - name: api
+        image: flow-monitor-backend:latest
+        imagePullPolicy: IfNotPresent
+        command: ["uvicorn", "action_layer.api:app", "--host", "0.0.0.0", "--port", "8000"]
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "256Mi"
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
+        ports:
+        - containerPort: 8000
+        env:
+        - name: REDIS_HOST
+          value: "redis-service"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flow-monitor-api-service
+spec:
+  type: ClusterIP
+  selector:
+    app: flow-monitor-api
+  ports:
+  - port: 80
+    targetPort: 8000
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: flow-monitor-api-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: flow-monitor-api
+  minReplicas: 3
+  maxReplicas: 30
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 60
